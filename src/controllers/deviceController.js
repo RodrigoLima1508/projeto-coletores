@@ -14,7 +14,21 @@ const broadcastUpdate = (wss, update) => {
 
 exports.getAllDevices = async (req, res) => {
   try {
-    const devices = await Device.find();
+    const { status, search } = req.query; // <-- Adicionado
+    let filter = {};
+
+    if (status) {
+      filter.status = status;
+    }
+
+    if (search) {
+      filter.$or = [
+        { macAddress: { $regex: search, $options: 'i' } },
+        { serialNumber: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const devices = await Device.find(filter); // <-- Adicionado
     res.json(devices);
   } catch (err) {
     res.status(500).send('Erro no servidor');
@@ -118,19 +132,19 @@ exports.unassignDevice = async (req, res) => {
 exports.setInactive = async (req, res) => {
   const { id } = req.params;
   try {
-    const device = await Device.findByIdAndUpdate(
-      id,
-      {
-        status: 'inativo',
-        assignedTo: null, // <-- Garante que o usuário atribuído seja removido
-      },
-      { new: true }
-    );
+    const device = await Device.findById(id);
     if (!device) {
       return res.status(404).json({ msg: 'Dispositivo não encontrado' });
     }
-    broadcastUpdate(req.wss, { type: 'device-updated', device });
-    res.json(device);
+
+    const updatedDevice = await Device.findByIdAndUpdate(
+      id,
+      { status: 'inativo', assignedTo: null },
+      { new: true }
+    );
+    
+    broadcastUpdate(req.wss, { type: 'device-updated', device: updatedDevice });
+    res.json(updatedDevice);
   } catch (err) {
     res.status(500).send('Erro no servidor');
   }
